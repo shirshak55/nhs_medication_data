@@ -1,0 +1,2 @@
+[alias]
+"playwright-core/package.json" = "./src/pw-playwright-core-package.json"
