@@ -1,0 +1,26 @@
+{
+    "name": "nhs_medication_data",
+    "module": "index.ts",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "start": "bun src/main.ts",
+        "fmt": "prettier --write .",
+        "build:exe": "bun src/build.ts --all"
+    },
+    "devDependencies": {
+        "@types/bun": "latest",
+        "prettier": "^3.3.3"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    },
+    "dependencies": {
+        "dotenv": "^17.2.3",
+        "p-limit": "^7.2.0",
+        "pino": "^10.1.0",
+        "pino-pretty": "^13.1.2",
+        "playwright-core": "^1.56.1",
+        "zod": "^4.1.12"
+    }
+}
