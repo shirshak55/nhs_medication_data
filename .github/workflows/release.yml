@@ -1,0 +1,63 @@
+name: Release with Bun
+
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Set up Bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
+
+            - name: Install dependencies
+              run: bun install
+
+            - name: Install Playwright Chromium only
+              run: bunx playwright install --with-deps chromium
+
+            - name: Run Bun start
+              run: bun start
+
+            - name: Ensure output.json exists
+              run: |
+                  if [ ! -f "output.json" ]; then
+                    echo "output.json not found!"
+                    exit 1
+                  fi
+
+            - name: Set date and tag variables
+              id: vars
+              run: |
+                  echo "TODAY_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+                  echo "TAG_NAME=$(date +'%Y-%m-%d')-${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+            - name: Create GitHub Release
+              id: create_release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: ${{ env.TAG_NAME }}
+                  release_name: ${{ env.TODAY_DATE }}
+                  draft: false
+                  prerelease: false
+
+            - name: Upload output.json to Release
+              uses: actions/upload-release-asset@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  upload_url: ${{ steps.create_release.outputs.upload_url }}
+                  asset_path: ./output.json
+                  asset_name: output.json
+                  asset_content_type: application/json
