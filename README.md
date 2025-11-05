@@ -24,6 +24,7 @@ This script will scrape data from NHS website and create structured data.
 - Clean configs, logging, Zod validation
 
 ## Todo
+
 - Add ESLint
 - Improve resilience (retries, streaming)
 - Add tests

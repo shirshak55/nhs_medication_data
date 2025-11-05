@@ -105,133 +105,149 @@ export async function fetchMedicineData(
     linkIndex: string,
     link: string,
 ): Promise<MedicineInfo | null> {
-    const page = await context.newPage()
+    const MAX_RETRIES = 5
+    const DELAY_MS = 30_000 // 30 seconds
 
-    try {
-        logger.info(`[${linkIndex}] Scraping medicine: ${link}`)
-        await page.goto(link, { waitUntil: "networkidle" })
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        const page = await context.newPage()
+        try {
+            const attemptInfo = `attempt ${attempt + 1}/${MAX_RETRIES + 1}`
+            logger.info(
+                `[${linkIndex}] Scraping medicine: ${link} (${attemptInfo})`,
+            )
+            await page.goto(link, { waitUntil: "networkidle" })
 
-        // First we collect the basic data from the page.
-        const heading = page.locator("h1")
-        await heading.waitFor() // or await expect(heading).toBeVisible();
+            // First we collect the basic data from the page.
+            const heading = page.locator("h1")
+            await heading.waitFor() // or await expect(heading).toBeVisible();
 
-        const fullText = (await heading.innerText()).trim()
+            const fullText = (await heading.innerText()).trim()
 
-        let captionText = ""
-        const captionLocator = page.locator(".nhsuk-caption-xl")
+            let captionText = ""
+            const captionLocator = page.locator(".nhsuk-caption-xl")
 
-        if (await captionLocator.count()) {
-            captionText = (await captionLocator.first().innerText()).trim()
-        }
-
-        const medicineName = captionText
-            ? fullText.replace(captionText, "").trim()
-            : fullText
-
-        let otherBrandName: Array<string> = []
-        if (captionText) {
-            const match = captionText.match(/Other brand names:\s*(.*)/i)
-            if (match?.[1]) {
-                otherBrandName = match[1]
-                    .trim()
-                    .split(",")
-                    .map((v) => v.trim())
+            if (await captionLocator.count()) {
+                captionText = (await captionLocator.first().innerText()).trim()
             }
+
+            const medicineName = captionText
+                ? fullText.replace(captionText, "").trim()
+                : fullText
+
+            let otherBrandName: Array<string> = []
+            if (captionText) {
+                const match = captionText.match(/Other brand names:\s*(.*)/i)
+                if (match?.[1]) {
+                    otherBrandName = match[1]
+                        .trim()
+                        .split(",")
+                        .map((v) => v.trim())
+                }
+            }
+
+            // Optional description
+            let description = ""
+            const descriptionLocator = page.locator("p.nhsuk-lede-text").first()
+
+            if (await descriptionLocator.count()) {
+                description =
+                    (await descriptionLocator.textContent())?.trim() ?? ""
+            }
+
+            // LinkItem type imported from ./types
+
+            const sectionLinks: LinkItem[] = await page.$$eval(
+                ".nhsuk-hub-key-links li a",
+                (anchors) => {
+                    const result: { url: string; text: string }[] = []
+
+                    anchors.forEach((a) => {
+                        const el = a as HTMLAnchorElement
+                        const text = el.textContent?.trim() ?? ""
+                        const url = el.href
+
+                        if (text && url) {
+                            result.push({ text, url })
+                        }
+                    })
+
+                    return result
+                },
+            )
+
+            const relatedConditions: LinkItem[] = await page.$$eval(
+                'div.beta-hub-related-links-title:has-text("Related conditions") + ul.beta-hub-related-links li a',
+                (anchors) => {
+                    const result: { url: string; text: string }[] = []
+
+                    anchors.forEach((a) => {
+                        const el = a as HTMLAnchorElement
+                        const text = el.textContent?.trim() ?? ""
+                        const url = el.href
+
+                        if (text && url) {
+                            result.push({ text, url })
+                        }
+                    })
+
+                    return result
+                },
+            )
+
+            const usefulResources: LinkItem[] = await page.$$eval(
+                'div.beta-hub-related-links-title:has-text("Useful resources") + ul.beta-hub-related-links li a',
+                (anchors) => {
+                    const result: { url: string; text: string }[] = []
+
+                    anchors.forEach((a) => {
+                        const el = a as HTMLAnchorElement
+                        const text = el.textContent?.trim() ?? ""
+                        const url = el.href
+
+                        if (text && url) {
+                            result.push({ text, url })
+                        }
+                    })
+
+                    return result
+                },
+            )
+            logger.info(
+                `[${linkIndex}] Starting to extract data from ${sectionLinks.length} sections`,
+            )
+
+            const medicineInfo: MedicineInfo = {
+                name: medicineName.trim(),
+                otherBrandNames: otherBrandName,
+                url: link,
+                description: description.trim(),
+                pages: await scrapeSections(context, sectionLinks),
+                relatedConditions,
+                usefulResources,
+            }
+
+            logger.info(
+                `[${linkIndex}] Successfully scraped medicine: ${medicineName}`,
+            )
+            return medicineInfo
+        } catch (error) {
+            logger.error(
+                { error, link },
+                `[${linkIndex}] Failed to scrape medicine (attempt ${attempt + 1}/${MAX_RETRIES + 1})`,
+            )
+            if (attempt < MAX_RETRIES) {
+                logger.warn(`[${linkIndex}] Retrying in ${DELAY_MS / 1000}s...`)
+                await setTimeout(DELAY_MS)
+                // continue with next attempt
+            } else {
+                return null
+            }
+        } finally {
+            await page.close()
         }
-
-        // Optional description
-        let description = ""
-        const descriptionLocator = page.locator("p.nhsuk-lede-text").first()
-
-        if (await descriptionLocator.count()) {
-            description = (await descriptionLocator.textContent())?.trim() ?? ""
-        }
-
-        // LinkItem type imported from ./types
-
-        const sectionLinks: LinkItem[] = await page.$$eval(
-            ".nhsuk-hub-key-links li a",
-            (anchors) => {
-                const result: { url: string; text: string }[] = []
-
-                anchors.forEach((a) => {
-                    const el = a as HTMLAnchorElement
-                    const text = el.textContent?.trim() ?? ""
-                    const url = el.href
-
-                    if (text && url) {
-                        result.push({ text, url })
-                    }
-                })
-
-                return result
-            },
-        )
-
-        const relatedConditions: LinkItem[] = await page.$$eval(
-            'div.beta-hub-related-links-title:has-text("Related conditions") + ul.beta-hub-related-links li a',
-            (anchors) => {
-                const result: { url: string; text: string }[] = []
-
-                anchors.forEach((a) => {
-                    const el = a as HTMLAnchorElement
-                    const text = el.textContent?.trim() ?? ""
-                    const url = el.href
-
-                    if (text && url) {
-                        result.push({ text, url })
-                    }
-                })
-
-                return result
-            },
-        )
-
-        const usefulResources: LinkItem[] = await page.$$eval(
-            'div.beta-hub-related-links-title:has-text("Useful resources") + ul.beta-hub-related-links li a',
-            (anchors) => {
-                const result: { url: string; text: string }[] = []
-
-                anchors.forEach((a) => {
-                    const el = a as HTMLAnchorElement
-                    const text = el.textContent?.trim() ?? ""
-                    const url = el.href
-
-                    if (text && url) {
-                        result.push({ text, url })
-                    }
-                })
-
-                return result
-            },
-        )
-        logger.info(
-            `[${linkIndex}] Starting to extract data from ${sectionLinks.length} sections`,
-        )
-
-        const medicineInfo: MedicineInfo = {
-            name: medicineName.trim(),
-            otherBrandNames: otherBrandName,
-            url: link,
-            description: description.trim(),
-            pages: await scrapeSections(context, sectionLinks),
-            relatedConditions,
-            usefulResources,
-        }
-
-        logger.info(
-            `[${linkIndex}] Successfully scraped medicine: ${medicineName}`,
-        )
-        return medicineInfo
-    } catch (error) {
-        logger.error(
-            { error, link },
-            `[${linkIndex}] Failed to scrape medicine`,
-        )
-        return null
-    } finally {
-        await page.close()
     }
+
+    return null
 }
 
 // We want to extract data from sections in parallel.
