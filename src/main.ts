@@ -1,4 +1,4 @@
-import { chromium } from "playwright"
+import { chromium } from "playwright-core"
 import fs from "fs/promises"
 import { logger } from "./logger"
 import { config } from "./config"

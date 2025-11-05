@@ -1,20 +1,22 @@
 import pino from "pino"
+import pretty from "pino-pretty"
 import "dotenv/config"
 
-// Initializing config requires logger, so we aren't using config here.
 const level = (process.env.LOG_LEVEL || "info").toLowerCase()
+const usePretty = !!process.stdout.isTTY
 
-// Centralized logger to keep things simple.
-export const logger = pino({
+const baseConfig = {
     level,
     base: undefined,
     timestamp: pino.stdTimeFunctions.isoTime,
-    transport: {
-        target: "pino-pretty",
-        options: {
-            colorize: true,
-            translateTime: "SYS:standard",
-            singleLine: false,
-        },
-    },
-})
+}
+
+const prettyStream = usePretty
+    ? pretty({
+          colorize: true,
+          translateTime: "SYS:standard",
+          singleLine: false,
+      })
+    : undefined
+
+export const logger = pino(baseConfig, prettyStream)
