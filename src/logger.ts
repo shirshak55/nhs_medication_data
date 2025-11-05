@@ -3,7 +3,8 @@ import pretty from "pino-pretty"
 import "dotenv/config"
 
 const level = (process.env.LOG_LEVEL || "info").toLowerCase()
-const usePretty = !!process.stdout.isTTY
+const isCI = process.env.GITHUB_ACTIONS === "true" || process.env.CI === "true"
+const usePretty = !!process.stdout.isTTY || isCI
 
 const baseConfig = {
     level,
