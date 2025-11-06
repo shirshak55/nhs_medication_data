@@ -23,6 +23,17 @@ jobs:
             - name: Build native executables
               run: bun run build:exe
 
+            - name: Tar each binary (preserve +x permissions)
+              run: |
+                  mkdir -p dist
+                  cd build
+                  for file in *; do
+                    if [ -f "$file" ]; then
+                      tar -czf "../dist/${file}.tar.gz" "$file"
+                      echo "Created dist/${file}.tar.gz"
+                    fi
+                  done
+
             - name: Run scraper (produces output.json)
               run: bun start
 
@@ -40,7 +51,7 @@ jobs:
                   tag_name: ${{ steps.vars.outputs.version }}
                   name: ${{ steps.vars.outputs.version }}
                   files: |
-                      build/*
+                      dist/*.tar.gz
                       output.json
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
